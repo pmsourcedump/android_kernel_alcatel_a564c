@@ -23,9 +23,16 @@
 #include <linux/init.h>
 #include <linux/nmi.h>
 #include <linux/dmi.h>
+#include <linux/coresight.h>
 
+//TCL,Add START,Simon Xiao,2014-04-02
+#include <linux/rtc.h>
+//TCL,Add END,Simon Xiao,2014-04-02
 #define PANIC_TIMER_STEP 100
 #define PANIC_BLINK_SPD 18
+
+/* Machine specific panic information string */
+char *mach_panic_string;
 
 int panic_on_oops;
 static unsigned long tainted_mask;
@@ -33,7 +40,10 @@ static int pause_on_oops;
 static int pause_on_oops_flag;
 static DEFINE_SPINLOCK(pause_on_oops_lock);
 
-int panic_timeout;
+#ifndef CONFIG_PANIC_TIMEOUT
+#define CONFIG_PANIC_TIMEOUT 0
+#endif
+int panic_timeout = CONFIG_PANIC_TIMEOUT;
 EXPORT_SYMBOL_GPL(panic_timeout);
 
 ATOMIC_NOTIFIER_HEAD(panic_notifier_list);
@@ -73,6 +83,20 @@ void panic(const char *fmt, ...)
 	va_list args;
 	long i, i_next = 0;
 	int state = 0;
+	/*TCL,add start,Simon xiao,2014-04-02*/
+        struct timespec ts;
+	struct rtc_time tm;
+	getnstimeofday(&ts);
+	rtc_time_to_tm(ts.tv_sec, &tm);
+	/*TCL,add end ,Simon Xiao,2014-04-02*/
+	coresight_abort();
+	/*
+	 * Disable local interrupts. This will prevent panic_smp_self_stop
+	 * from deadlocking the first cpu that invokes the panic, since
+	 * there is nothing to prevent an interrupt handler (that runs
+	 * after the panic_lock is acquired) from invoking panic again.
+	 */
+	local_irq_disable();
 
 	/*
 	 * It's possible to come here directly from a panic-assertion and
@@ -93,6 +117,11 @@ void panic(const char *fmt, ...)
 	vsnprintf(buf, sizeof(buf), fmt, args);
 	va_end(args);
 	printk(KERN_EMERG "Kernel panic - not syncing: %s\n",buf);
+	/*TCL,add start,Simon xiao,2014-04-02*/
+	printk(KERN_EMERG "Kernel-Panic-Timestamp: %s %d-%02d-%02d %02d:%02d:%02d.%09lu UTC\n",
+		"tct-debug", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+		tm.tm_hour, tm.tm_min, tm.tm_sec, ts.tv_nsec);
+	/*TCL,add end ,Simon Xiao,2014-04-02*/
 #ifdef CONFIG_DEBUG_BUGVERBOSE
 	/*
 	 * Avoid nested stack-dumping if a panic occurs during oops processing
@@ -375,6 +404,11 @@ late_initcall(init_oops_id);
 void print_oops_end_marker(void)
 {
 	init_oops_id();
+
+	if (mach_panic_string)
+		printk(KERN_WARNING "Board Information: %s\n",
+		       mach_panic_string);
+
 	printk(KERN_WARNING "---[ end trace %016llx ]---\n",
 		(unsigned long long)oops_id);
 }
@@ -457,7 +491,12 @@ EXPORT_SYMBOL(warn_slowpath_null);
  */
 void __stack_chk_fail(void)
 {
+/*
 	panic("stack-protector: Kernel stack is corrupted in: %p\n",
+		__builtin_return_address(0));
+*/
+    BUG();
+    printk(KERN_ERR "stack-protector: Kernel stack is corrupted in: %p\n",
 		__builtin_return_address(0));
 }
 EXPORT_SYMBOL(__stack_chk_fail);

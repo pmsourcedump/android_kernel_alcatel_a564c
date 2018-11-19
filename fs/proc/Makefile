@@ -28,3 +28,8 @@ proc-$(CONFIG_PROC_VMCORE)	+= vmcore.o
 proc-$(CONFIG_PROC_DEVICETREE)	+= proc_devtree.o
 proc-$(CONFIG_PRINTK)	+= kmsg.o
 proc-$(CONFIG_PROC_PAGE_MONITOR)	+= page.o
+#add by qian.zhou for PR697463
+ifeq ($(TARGET_BUILD_VARIANT), user)
+ccflags-y += -DCONFIG_RM_MEM
+endif
+#end add

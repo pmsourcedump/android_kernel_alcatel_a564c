@@ -75,6 +75,10 @@
 #include <asm/sections.h>
 #include <asm/cacheflush.h>
 
+//TCL Add START,Simon.Xiao,2014-03-26
+// add by xiaoyong.wu
+#include <linux/bootprof.h>
+//TCL Add END,Simon.Xiao,2014-03-26
 #ifdef CONFIG_X86_LOCAL_APIC
 #include <asm/smp.h>
 #endif
@@ -359,6 +363,7 @@ static __initdata DECLARE_COMPLETION(kthreadd_done);
 static noinline void __init_refok rest_init(void)
 {
 	int pid;
+	const struct sched_param param = { .sched_priority = 1 };
 
 	rcu_scheduler_starting();
 	/*
@@ -372,6 +377,7 @@ static noinline void __init_refok rest_init(void)
 	rcu_read_lock();
 	kthreadd_task = find_task_by_pid_ns(pid, &init_pid_ns);
 	rcu_read_unlock();
+	sched_setscheduler_nocheck(kthreadd_task, SCHED_FIFO, &param);
 	complete(&kthreadd_done);
 
 	/*
@@ -475,11 +481,6 @@ asmlinkage void __init start_kernel(void)
 	smp_setup_processor_id();
 	debug_objects_early_init();
 
-	/*
-	 * Set up the the initial canary ASAP:
-	 */
-	boot_init_stack_canary();
-
 	cgroup_init_early();
 
 	local_irq_disable();
@@ -494,6 +495,10 @@ asmlinkage void __init start_kernel(void)
 	page_address_init();
 	printk(KERN_NOTICE "%s", linux_banner);
 	setup_arch(&command_line);
+	/*
+	 * Set up the the initial canary ASAP:
+	 */
+	boot_init_stack_canary();
 	mm_init_owner(&init_mm, &init_task);
 	mm_init_cpumask(&init_mm);
 	setup_command_line(command_line);
@@ -807,7 +812,9 @@ static noinline int init_post(void)
 	system_state = SYSTEM_RUNNING;
 	numa_default_policy();
 
-
+//TCL Add START,Simon.Xiao,2014-03-26
+    log_boot("Kernel_init_done"); // add by xiaoyong.wu
+//TCL Add END,Simon.Xiao,2014-03-26
 	current->signal->flags |= SIGNAL_UNKILLABLE;
 
 	if (ramdisk_execute_command) {
@@ -891,3 +898,20 @@ static int __init kernel_init(void * unused)
 	init_post();
 	return 0;
 }
+// add by qiang.zhao for power off alarm bug 610509 begin 
+bool alarm_boot_mode = false;
+bool charger_boot_mode = false;
+static int __init alarm_boot_check(char *p)
+{
+	if(!strcmp(p, "alarm")) {
+		alarm_boot_mode = true;
+	}
+	else if(!strcmp(p, "charger")) {
+		charger_boot_mode = true;
+	}
+
+	printk("%s alarm_boot_mode = %d\n", __func__, alarm_boot_mode);
+	return 0;
+}
+early_param("androidboot.mode", alarm_boot_check);
+// add by qiang.zhao end

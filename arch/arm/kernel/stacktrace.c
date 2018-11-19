@@ -34,10 +34,23 @@ int notrace unwind_frame(struct stackframe *frame)
 	if (fp < (low + 12) || fp + 4 >= high)
 		return -EINVAL;
 
+	if (fp % 4 != 0)
+		return -EINVAL;
+
 	/* restore the registers from the stack frame */
 	frame->fp = *(unsigned long *)(fp - 12);
 	frame->sp = *(unsigned long *)(fp - 8);
 	frame->pc = *(unsigned long *)(fp - 4);
+
+	/*
+	 * ensure the next stack pointer is above this one to guarantee
+	 * bounded execution
+	 */
+	if (frame->sp < fp || frame->sp > high)
+		return -EINVAL;
+
+	if (frame->sp % 4 != 0)
+		return -EINVAL;
 
 	return 0;
 }

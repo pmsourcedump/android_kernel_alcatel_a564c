@@ -127,7 +127,7 @@ static unsigned long get_sample_period(void)
 /* Commands for resetting the watchdog */
 static void __touch_watchdog(void)
 {
-	int this_cpu = smp_processor_id();
+	int this_cpu = raw_smp_processor_id();
 
 	__this_cpu_write(watchdog_touch_ts, get_timestamp(this_cpu));
 }
@@ -296,6 +296,7 @@ static enum hrtimer_restart watchdog_timer_fn(struct hrtimer *hrtimer)
 		if (__this_cpu_read(soft_watchdog_warn) == true)
 			return HRTIMER_RESTART;
 
+		touch_hw_watchdog();
 		printk(KERN_EMERG "BUG: soft lockup - CPU#%d stuck for %us! [%s:%d]\n",
 			smp_processor_id(), duration,
 			current->comm, task_pid_nr(current));
@@ -306,8 +307,21 @@ static enum hrtimer_restart watchdog_timer_fn(struct hrtimer *hrtimer)
 		else
 			dump_stack();
 
-		if (softlockup_panic)
+		if (softlockup_panic) {
+
+			if (is_csd_lock_waiting()) {
+				printk(KERN_ERR "softlockup: trigger watchdog reset!\n");
+				/*
+				 * Preemption has been diabled in current
+				 * context. And in case it fails to trigger
+				 * watchdog reset, handle it as normal
+				 * softlockup panic.
+				 */
+				trigger_watchdog_reset();
+			}
+			add_taint(TAINT_DIE);
 			panic("softlockup: hung tasks");
+		}
 		__this_cpu_write(soft_watchdog_warn, true);
 	} else
 		__this_cpu_write(soft_watchdog_warn, false);

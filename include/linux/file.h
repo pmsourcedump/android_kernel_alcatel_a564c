@@ -11,6 +11,13 @@
 
 struct file;
 
+// verify the reserved size for user data partition by zhiling.chen, merged by qian.zhou for PR668979 
+#define  LIMIT_USERDATA_SIZE 1
+
+#ifdef LIMIT_USERDATA_SIZE
+#define USERDATA_PARTITION_RESERVED_SIZE_TH  10*1024*1024   //50*1024*1024
+#endif // LIMIT_USERDATA_SIZE
+// verify the reserved size for user data partition by zhiling.chen, merged by qian.zhou for PR668979 
 extern void fput(struct file *);
 
 struct file_operations;
